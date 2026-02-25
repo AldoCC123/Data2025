@@ -1,19 +1,45 @@
 import streamlit as st
+import gspread # Importante: necesitas instalar esta librería (pip install gspread)
+
+# ==========================================
+# 0. Función para guardar en Google Sheets
+# ==========================================
+def guardar_en_gsheets(datos):
+    try:
+        # 1. Autenticación usando los secretos de Streamlit (.streamlit/secrets.toml)
+        # Nota: Asegúrate de tener configurado tu archivo secrets.toml con las credenciales de Google
+        gc = gspread.service_account_from_dict(st.secrets["gcp_service_account"])
+        
+        # 2. Abrir el documento por su nombre exacto (debe estar compartido con el correo de servicio)
+        documento = gc.open("Base_de_Datos_Registro")
+        hoja = documento.sheet1 # Selecciona la primera pestaña del Excel
+        
+        # 3. Preparar los datos en una lista plana (una fila)
+        nueva_fila = [
+            datos.get('nombre', ''), 
+            datos.get('apellido', ''), 
+            datos.get('email', ''), 
+            datos.get('telefono', '')
+        ]
+        
+        # 4. Añadir la fila al final del documento
+        hoja.append_row(nueva_fila)
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar en Google Sheets: {e}")
+        return False
 
 # ==========================================
 # 1. Configuración inicial y Estado (State)
 # ==========================================
 st.set_page_config(page_title="Formulario por Pasos", page_icon="📝")
 
-# Inicializamos la variable que controla en qué ventana/paso estamos
 if 'ventana_actual' not in st.session_state:
     st.session_state.ventana_actual = 1
 
-# Inicializamos un diccionario para guardar los datos a lo largo de las ventanas
 if 'datos_registro' not in st.session_state:
     st.session_state.datos_registro = {}
 
-# Funciones de navegación
 def siguiente_ventana():
     st.session_state.ventana_actual += 1
 
@@ -39,7 +65,6 @@ if st.session_state.ventana_actual == 1:
     st.header("Paso 1: Datos Personales")
     st.write("Por favor, ingresa tu información básica.")
     
-    # Leemos los datos previos si el usuario retrocedió
     nombre_previo = st.session_state.datos_registro.get('nombre', '')
     apellido_previo = st.session_state.datos_registro.get('apellido', '')
     
@@ -47,15 +72,13 @@ if st.session_state.ventana_actual == 1:
     apellido = st.text_input("Apellido", value=apellido_previo)
     
     if st.button("Siguiente ➡️"):
-        # Validación: Asegurarse de que llenó los campos
         if nombre.strip() == "" or apellido.strip() == "":
             st.error("⚠️ Debes completar Nombre y Apellido para continuar.")
         else:
-            # Guardamos la info y avanzamos
             st.session_state.datos_registro['nombre'] = nombre
             st.session_state.datos_registro['apellido'] = apellido
             siguiente_ventana()
-            st.rerun() # Fuerza la recarga para mostrar la siguiente ventana
+            st.rerun()
 
 # ------------------------------------------
 # VENTANA 2: Datos de Contacto
@@ -70,7 +93,6 @@ elif st.session_state.ventana_actual == 2:
     email = st.text_input("Correo Electrónico", value=email_previo)
     telefono = st.text_input("Teléfono", value=telefono_previo)
     
-    # Botones de navegación en columnas
     col1, col2 = st.columns(2)
     
     with col1:
@@ -97,7 +119,6 @@ elif st.session_state.ventana_actual == 3:
     st.header("Paso 3: Confirmación")
     st.write("Por favor, revisa que tus datos sean correctos antes de guardar:")
     
-    # Mostramos los datos recolectados en las ventanas anteriores
     st.json(st.session_state.datos_registro)
     
     col1, col2 = st.columns(2)
@@ -108,14 +129,17 @@ elif st.session_state.ventana_actual == 3:
             st.rerun()
             
     with col2:
+        # Aquí ejecutamos el guardado al presionar el botón
         if st.button("✅ Registrar Datos"):
-            st.success("¡Registro completado con éxito!")
-            st.balloons()
             
-            # Aquí pondrías tu código para guardar en una Base de Datos, Excel, etc.
-            # ej: guardar_en_bd(st.session_state.datos_registro)
+            with st.spinner("Guardando en Google Sheets..."):
+                exito = guardar_en_gsheets(st.session_state.datos_registro)
             
-            # Botón para registrar a una nueva persona
-            if st.button("Registrar otra persona"):
-                reiniciar_formulario()
-                st.rerun()
+            if exito:
+                st.success("¡Registro completado y guardado en la nube con éxito!")
+                st.balloons()
+                
+                # Desplegamos el botón para reiniciar solo si se guardó bien
+                if st.button("Registrar otra persona"):
+                    reiniciar_formulario()
+                    st.rerun()
